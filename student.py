@@ -9,46 +9,59 @@ from wumpus_world import WumpusWorld
 
 # ---------- Q1: Search ----------
 def bfs(graph, start_node, goal_node):
-    """Return shortest path (list of nodes) from start to goal, or [] if none."""
-    """
-    YOUR CODE HERE
-    """
-    
-    """
-    END YOUR CODE HERE
-    """
-    
-    # Keep this as the return if you cannot find a route from start_node to end_node        
-    return [] 
 
+    queue = [(start_node, [start_node])]
+    visited = [start_node]
 
-def dfs(graph, start_node, goal_node):
-    """Return a path (list of nodes) from start to goal using DFS, or [] if none."""
+    while queue != []:
+        v, path = queue.pop(0)
 
-    """
-    YOUR CODE HERE
-    """
-    
-    """
-    END YOUR CODE HERE
-    """
-    
-    # Keep this as the return if you cannot find a route from start_node to end_node    
+        if v == goal_node:
+            return path
+
+        for u in graph.get_neighbors(v):
+            if visited.__contains__(u) == False:
+                visited.append(u)
+                queue.append((u, path + [u]))
+
     return []
 
 
+
+def dfs(graph, start_node, goal_node):
+    stack = [(start_node, [start_node])]
+    visited = [start_node]
+
+    while stack != []:
+        v, path = stack.pop()
+
+        if v == goal_node:
+            return path
+
+        for u in graph.get_neighbors(v):
+            if visited.__contains__(u) == False:
+                visited.append(u)
+                stack.append((u, path + [u]))
+    return []
+
 def astar(graph, start_node, goal_node, heuristic):
-    """Return shortest path using A* given heuristic h(node)->float."""
-    
-    """
-    YOUR CODE HERE
-    """
-    
-    """
-    END YOUR CODE HERE
-    """
-    
-    # Keep this as the return if you cannot find a route from start_node to end_node    
+    queue = [(start_node, [start_node], 0, 0)] # curr node , path, f_currNode, g_currNode
+    visited = [start_node]
+
+    while queue != []:
+        v, path, f_v, g_v = queue.pop(0)
+
+        if v == goal_node:
+            return path, g_v
+        for u in graph.get_neighbors(v):
+            if visited.__contains__(u) == False:
+                visited.append(u)
+                g_u = g_v + graph.edges[(v, u)].get_distance()
+                h_u = heuristic(graph.nodes[u])
+                
+                f_u = g_u + h_u
+                queue.append((u, path + [u], f_u, g_u))
+        queue.sort(key=lambda x: x[2]) 
     return [], float.inf
 
 
