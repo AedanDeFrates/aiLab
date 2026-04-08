@@ -10,11 +10,13 @@ from wumpus_world import WumpusWorld
 # ---------- Q1: Search ----------
 def bfs(graph, start_node, goal_node):
 
-    queue = [(start_node, [start_node])]
+    queue = [start_node]
+    queue_path = [[start_node]]
     visited = [start_node]
 
     while queue != []:
-        v, path = queue.pop(0)
+        v = queue.pop(0)
+        path = queue_path.pop(0);
 
         if v == goal_node:
             return path
@@ -22,18 +24,20 @@ def bfs(graph, start_node, goal_node):
         for u in graph.get_neighbors(v):
             if visited.__contains__(u) == False:
                 visited.append(u)
-                queue.append((u, path + [u]))
-
+                queue.append(u)
+                queue_path.append(path + [u])
     return []
 
 
 
 def dfs(graph, start_node, goal_node):
-    stack = [(start_node, [start_node])]
+    stack = [start_node]
+    stack_path = [[start_node]]
     visited = [start_node]
 
     while stack != []:
-        v, path = stack.pop()
+        v = stack.pop()
+        path = stack_path.pop()
 
         if v == goal_node:
             return path
@@ -41,7 +45,8 @@ def dfs(graph, start_node, goal_node):
         for u in graph.get_neighbors(v):
             if visited.__contains__(u) == False:
                 visited.append(u)
-                stack.append((u, path + [u]))
+                stack.append(u)
+                stack_path.append(path + [u])
     return []
 
 def astar(graph, start_node, goal_node, heuristic):
@@ -67,6 +72,7 @@ def astar(graph, start_node, goal_node, heuristic):
 
 # ---------- Q2: Stochastic optimization ----------
 class ScatterPlainEvolutionaryAlgorithm:
+
     def __init__(self, scatterplain, points: int, seed: int = 0):
         self.scatterplain = scatterplain # DO NOT CHANGE THIS
         self.points = points             # DO NOT CHANGE THIS
@@ -79,17 +85,54 @@ class ScatterPlainEvolutionaryAlgorithm:
         random.seed(seed)
         
     def run_optimization(self):
-        """Run evolutionary algorithm to find a good route. Return best route and distance."""
         # Initialize population with random permutations
+        random.seed(self.seed)
+
         population = [random.sample(range(self.points), self.points) for _ in range(self.population_size)]
-        history = {} # Dict where key is an individual and value is their fitness. Useful for elitism.
-        
         best_solution = None
         best_fitness = float('-inf')
-        
+
+        def ordered_crossover(parent1, parent2):
+            start = random.randrange(self.points)
+            end = random.randrange(start, self.points)
+            child = [-1] * self.points
+            # Copy slice from first parent
+            child[start:end] = parent1[start:end]
+            # Fill remaining genes from second parent in order
+            fill_pos = end
+            for gene in parent2:
+                if gene not in child:
+                    if fill_pos >= self.points:
+                        fill_pos = 0
+                    child[fill_pos] = gene
+                    fill_pos += 1
+            return child
+
+        def mutate_swap(individual):
+            i, j = random.sample(range(self.points), 2)
+            individual[i], individual[j] = individual[j], individual[i]
+
         for gen in range(self.generations):
-            # TODO: Write evolutionary algorithm. Can make separate functions to call. 
-            continue
+            population_fitness = [(ind, self.scatterplain.fitness(ind)) for ind in population]
+            population_fitness.sort(key=lambda x: x[1], reverse=True)
+
+            # Keep the best solution found so far.
+            if population_fitness[0][1] > best_fitness:
+                best_solution = list(population_fitness[0][0])
+                best_fitness = population_fitness[0][1]
+
+            elites = [list(ind) for ind, _ in population_fitness[:self.elitism]]
+
+            children = []
+            while len(children) < self.population_size - self.elitism:
+                parent1 = random.choice(elites)
+                parent2 = random.choice(elites)
+                child = ordered_crossover(parent1, parent2)
+                if random.random() < self.mutation_rate:
+                    mutate_swap(child)
+                children.append(child)
+
+            population = elites + children
 
         return best_solution, best_fitness
 
