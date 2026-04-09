@@ -10,11 +10,13 @@ from wumpus_world import WumpusWorld
 # ---------- Q1: Search ----------
 def bfs(graph, start_node, goal_node):
 
-    queue = [(start_node, [start_node])]
+    queue = [start_node]
+    queue_path = [[start_node]]
     visited = [start_node]
 
     while queue != []:
-        v, path = queue.pop(0)
+        v = queue.pop(0)
+        path = queue_path.pop(0);
 
         if v == goal_node:
             return path
@@ -22,18 +24,20 @@ def bfs(graph, start_node, goal_node):
         for u in graph.get_neighbors(v):
             if visited.__contains__(u) == False:
                 visited.append(u)
-                queue.append((u, path + [u]))
-
+                queue.append(u)
+                queue_path.append(path + [u])
     return []
 
 
 
 def dfs(graph, start_node, goal_node):
-    stack = [(start_node, [start_node])]
+    stack = [start_node]
+    stack_path = [[start_node]]
     visited = [start_node]
 
     while stack != []:
-        v, path = stack.pop()
+        v = stack.pop()
+        path = stack_path.pop()
 
         if v == goal_node:
             return path
@@ -41,7 +45,8 @@ def dfs(graph, start_node, goal_node):
         for u in graph.get_neighbors(v):
             if visited.__contains__(u) == False:
                 visited.append(u)
-                stack.append((u, path + [u]))
+                stack.append(u)
+                stack_path.append(path + [u])
     return []
 
 def astar(graph, start_node, goal_node, heuristic):
@@ -67,6 +72,7 @@ def astar(graph, start_node, goal_node, heuristic):
 
 # ---------- Q2: Stochastic optimization ----------
 class ScatterPlainEvolutionaryAlgorithm:
+
     def __init__(self, scatterplain, points: int, seed: int = 0):
         self.scatterplain = scatterplain # DO NOT CHANGE THIS
         self.points = points             # DO NOT CHANGE THIS
@@ -79,17 +85,55 @@ class ScatterPlainEvolutionaryAlgorithm:
         random.seed(seed)
         
     def run_optimization(self):
-        """Run evolutionary algorithm to find a good route. Return best route and distance."""
         # Initialize population with random permutations
+        random.seed(self.seed)
+
         population = [random.sample(range(self.points), self.points) for _ in range(self.population_size)]
-        history = {} # Dict where key is an individual and value is their fitness. Useful for elitism.
-        
         best_solution = None
         best_fitness = float('-inf')
-        
+
+        def ordered_crossover(parent1, parent2):
+            start = random.randrange(self.points)
+            end = random.randrange(start, self.points)
+            child = [-1] * self.points
+            # Copy slice from first parent
+            child[start:end] = parent1[start:end]
+            # Fill remaining genes from second parent in order
+            fill_pos = end
+            for gene in parent2:
+                if gene not in child:
+                    if fill_pos >= self.points:
+                        fill_pos = 0
+                    child[fill_pos] = gene
+                    fill_pos += 1
+            return child
+
+        def mutate_swap(individual):
+            i, j = random.sample(range(self.points), 2)
+            individual[i], individual[j] = individual[j], individual[i]
+
         for gen in range(self.generations):
-            # TODO: Write evolutionary algorithm. Can make separate functions to call. 
-            continue
+            population_fitness = [(ind, self.scatterplain.fitness(ind)) for ind in population]
+            population_fitness.sort(key=lambda x: x[1], reverse=True)
+
+            # Keep the best solution found so far.
+            if (population_fitness[0][1] > best_fitness):
+                best_solution = list(population_fitness[0][0])
+                best_fitness = population_fitness[0][1]
+
+            elites = [list(ind) for ind, _ in population_fitness[:self.elitism]]
+
+            children = []
+            while (len(children) < self.population_size - self.elitism):
+                parent1 = random.choice(elites)
+                parent2 = random.choice(elites)
+                child = ordered_crossover(parent1, parent2)
+                if random.random() < self.mutation_rate:
+                    mutate_swap(child)
+                children.append(child)
+                continue
+
+            population = elites + children
 
         return best_solution, best_fitness
 
@@ -115,6 +159,7 @@ class MCTS:
             exploration_constant: Constant c in UCB formula (typically √2)
             simulate_strategy: One of "random", "heuristic", or "greedy"
         """
+
         self.connectfour = connectfour
         self.exploration_constant = exploration_constant
         self.simulate_strategy = simulate_strategy
@@ -154,7 +199,28 @@ class MCTS:
         Returns:
             Selected node for expansion
         """
-        # TODO: Implement the function
+        while (not (node.is_terminal())):
+
+            if(not node.is_fully_expanded()):
+                return node
+            
+            children = node.children
+            bestNode = None
+            bestUCB = float('-inf')
+
+            for n in children:
+                ucb = self._ucb(node, n)
+                if(ucb > bestUCB):
+                    bestUCB = ucb
+                    bestNode = n
+
+            if(bestNode is None):
+                return node
+            
+            node = bestNode
+
+            continue
+
         return node # This is a placeholder.
     
     def _expand(self, node: MCTSNode) -> MCTSNode:
@@ -355,6 +421,11 @@ class MCTS:
             node: Node to start backpropagation from
             reward: Reward to propagate
         """
+        while node is not None:
+            node.visit_count += 1
+            node.total_reward += reward
+            node = node.parent
+
         # TODO implement backpropagation
     
     def _ucb(self, node: MCTSNode, child: MCTSNode) -> float:
@@ -372,7 +443,10 @@ class MCTS:
         if child.visit_count == 0:
             return float('inf')
         
-        return 0 # This is a placeholder. You need to implement UCB. 
+        exploite = child.total_reward / child.visit_count
+        explore = self.exploration_constant * math.sqrt(math.log(node.visit_count) / child.visit_count)
+
+        return exploite + explore
     
     def _best_child(self, node: MCTSNode, exploration_weight: float) -> MCTSNode:
         """
@@ -450,7 +524,14 @@ class SARSAAgent:
     
     def update(self, state: int, action: int, reward: float, next_state: int, next_action: int, done: bool):
         # TODO implement the SARSA update rule
-        pass
+        # state - action - reward - state - action
+        q = self.Q[state, action]
+        if done:
+            target = reward
+        else:
+            target = reward + self.discount_factor * self.Q[next_state, next_action]
+
+        self.Q[state, action] += self.learning_rate * (target - q)
     
     def train(self):
         """
@@ -524,7 +605,7 @@ class SARSAAgent:
         
         return episode_rewards
 
-q_learning_config = {"learning_rate": 0.05, "discount_factor": 0.9, "epsilon": 0.1, "episodes": 100000, "verbose": False}
+q_learning_config = {"learning_rate": 0.1, "discount_factor": 0.9, "epsilon": 0.1, "episodes": 100000, "verbose": False}
 
 class QLearningAgent:
     """
@@ -573,7 +654,14 @@ class QLearningAgent:
     
     def update(self, state: int, action: int, reward: float, next_state: int, done: bool):
         # TODO implement the Q-Learning update rule
-        pass
+        currentQ = self.Q[state, action]
+
+        if done:
+            target = reward
+        else:
+            target = reward + self.discount_factor * np.max(self.Q[next_state])
+
+        self.Q[state, action] = currentQ + self.learning_rate * (target - currentQ)
     
     def train(self):
         """
@@ -666,6 +754,16 @@ def gradient_descent(f, x0, y0, max_iter=100, step_size=0.5, h=1e-6):
     x, y = float(x0), float(y0)
     history = [(x, y, f(x, y))]
 
+    for _ in range(max_iter):
+        dx = (f(x + h, y) - f(x - h, y)) / (2*h)
+        dy = (f(x, y+h) - f(x, y-h)) / (2*h)
+        gradient = []
+
+        x = x - step_size * dx
+        y = y - step_size * dy
+
+        history.append((x,y,f(x,y)))
+        continue
     # TODO implement gradient descent
     
     return history
@@ -688,13 +786,32 @@ def newton_raphson(f, x0, y0, max_iter=100, h=1e-6):
     """
     x, y = float(x0), float(y0)
     history = [(x, y, f(x, y))]
-    
-    # TODO implement Newton-Raphson method
-    
+
+    for _ in range(max_iter):
+        dx = (f(x + h, y) - f(x - h, y)) / (2*h)
+        dy = (f(x, y + h) - f(x, y-h)) / (2*h)
+        gradient = np.array([dx, dy])
+
+        dxdx = (f(x + h, y) - 2*f(x,y) + f(x - h, y)) / (h**2)
+        dydy = (f(x, y + h) - 2*f(x,y) + f(x, y - h)) / (h**2)
+
+        dxdy = (f(x + h, y + h) - f(x + h, y - h) - f(x - h, y + h) + f(x - h, y - h)) / (4 * (h**2))
+
+        hessian = np.array([[dxdx, dxdy], [dxdy, dydy]])
+
+        try:
+            step = np.linalg.solve(hessian, gradient)
+        except np.linalg.LinAlgError:
+            break
+
+        x -= step[0]
+        y -= step[1]
+
+        history.append((x, y, f(x,y)))
+
     return history
 
-
-# ---------- Q5: 2-layer MLP w/ BACKPROPAGATION ----------
+# ---------- Q6: 2-layer MLP w/ BACKPROPAGATION ----------
 GRADUATE_OR_HONORS = False  # Set to True if you are a graduate student or honors undergrad, False otherwise
 
 NEURAL_NET_SETTINGS = { # Used by NeuralNet, only if GRADUATE_OR_HONORS is False
@@ -791,7 +908,13 @@ class NeuralNet(Classifier):
         """
         Returns the output of the current neural network for the given input
         """
-        raise NotImplementedError("Implement feedforward first!")
+        z_hidden = np.dot(inputs, self.w_input)
+        a_hidden = self.transfer(z_hidden)
+
+        z_output = np.dot(a_hidden, self.w_output)
+        a_output = self.transfer(z_output)
+
+        return a_output
 
     def backprop(self, x, y):
         """
@@ -800,6 +923,21 @@ class NeuralNet(Classifier):
         """
 
         ### YOUR CODE HERE
+        zH = np.dot(x, self.w_input) 
+        aH = self.transfer(zH)
+
+        zOut = np.dot(aH, self.w_output) 
+        aOut = self.transfer(zOut)      
+
+        dOut = aOut - y
+
+
+        nabla_output = np.outer(aH, dOut)
+
+    
+        dH = (self.w_output.flatten() * dOut) * self.dtransfer(zH)
+
+        nabla_input = np.outer(x, dH) 
 
         ### END YOUR CODE
 
@@ -822,7 +960,13 @@ class NeuralNet(Classifier):
             np.random.shuffle(XY)
 
             for j in range(XY.shape[0]):
-                # NOTE: Your code here. Run backprop and then update the weights accordingly. 
+                x = XY[j, :-1]
+                y = XY[j, -1]
+
+                nabla_input, nabla_output = self.backprop(x, y)
+
+                self.w_input -= eta * nabla_input
+                self.w_output -= eta * nabla_output
                 continue
             
                 ### END YOUR CODE
